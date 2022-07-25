@@ -1,0 +1,124 @@
+{$DEFINE SRL_DISABLE_REMOTEINPUT}
+{$I SRL/osr.simba}
+{$I WaspLib/osr.simba}
+
+///////////////////////////////////////////////////
+//  Power chop trees to grind WC level.
+//  Currently setup to chop Teaks.
+//
+//  User beware, this was written very quickly and
+//  probably has bugs. Don't leave it unattended for too long.
+///////////////////////////////////////////////////
+
+type
+  EState = (
+    WOODCUTTING, DROPPING
+  );
+
+  TScript = record(TBaseWalkerScript)
+    State: EState;
+    Tree: TRSObject;
+  end;
+
+var
+  Script: TScript;
+
+const
+  PMINER_DP: TIntegerArray = [0,4,8,12,16,20,24,  25,21,17,13,9,5,1,  2,6,10,14,18,22,26, 27, 23, 19, 15, 11, 7, 3];
+
+
+function TRSObject.Click(LeftClick: Boolean = True; Attempts: Int32 = 2): Boolean; override;
+var
+  ATPA: T2DPointArray;
+  Points: TPointArray;
+begin
+  // ATPA := MainScreen.FindObject(Finder);
+  if Self.Find(ATPA) then
+    begin
+      ATPA.SortBySize();
+      Points := ATPA[0] // 0 for the largest one.
+
+      if Points <> [] then
+      begin
+        //Hover
+        Mouse.Move(Points[Random(0, High(Points))]);
+        //Click
+        Mouse.Click(MOUSE_LEFT);
+      end;
+
+      //Mouse.Move(Box(Mouse.Position, 75, 75), True);
+    end;
+end;
+
+procedure TAntiban.Setup; override;
+begin
+  inherited;
+
+end;
+
+procedure TScript.WriteMsg(Message: String);
+begin
+  WriteLn('[Bot]: ', Message);
+end;
+
+procedure TScript.Init(MaxActions: Int32; MaxTime: Int64); override;
+begin
+  Name := 'PowerIron';
+
+  inherited;
+
+  Tree.SetupCommon();
+  Tree.Filter.Walker := False;
+  Tree.Filter.Finder := True;
+  Tree.Finder.Colors += CTS2(7122842, 3, 0.12, 0.97);
+
+  Login.AddPlayer('USERNAME_HERE', 'PASSWORD_HERE', '', []);
+
+  if not RSClient.IsLoggedIn then
+    Login.LoginPlayer;
+end;
+
+function TScript.GetState: EState;
+begin
+  if Keyboard.IsKeyDown(VK_BACK) then
+    TerminateScript;
+
+  // if inv full drop all
+  if Inventory.IsFull() then
+  begin
+    Exit(EState.DROPPING);
+  end;
+
+  Exit(EState.WOODCUTTING); 
+end;
+
+procedure TScript.Run(MaxTime: Int64);
+begin
+  ClearDebug;
+  Self.Init(999999999, MaxTime);
+
+  while not Self.ShouldStop do
+  begin
+    State := Self.GetState;
+
+    case State of
+      WOODCUTTING:
+        begin
+          WriteMsg('chopping');
+          Tree.Click();
+          Wait(5000, 10000);
+        end;
+      DROPPING:
+        begin
+          WriteMsg('dropping');
+          Inventory.ShiftDrop(PMINER_DP);
+        end;
+    end;
+
+    //Self.DoAntiban;
+  end;
+end;
+
+begin
+  Script.Run(29600000);
+end.

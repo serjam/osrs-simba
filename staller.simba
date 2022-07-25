@@ -1,0 +1,141 @@
+{$DEFINE SRL_DISABLE_REMOTEINPUT}
+{$I SRL/osr.simba}
+{$I WaspLib/osr.simba}
+
+///////////////////////////////////////////////////
+//  Train Theiving at the house in Hosidius with two
+//  fruit stalls. Just clicks one stall forever...
+//  Commented out version where it runs between the two.
+//  As always, needs RuneLite screen markers.
+//
+//  User beware, this was written very quickly and
+//  probably has bugs. Don't leave it unattended for too long.
+///////////////////////////////////////////////////
+
+type
+  EState = (
+    STEALING, DROPPING
+  );
+
+  TScript = record(TBaseWalkerScript)
+    State: EState;
+    Stall: TRSObject;
+  end;
+
+var
+  Script: TScript;
+
+const
+  PMINER_DP: TIntegerArray = [0,4,8,12,16,20,24,  25,21,17,13,9,5,1,  2,6,10,14,18,22,26, 27, 23, 19, 15, 11, 7, 3];
+  StrangeFruitDTM := DTMFromString('mAAEAAHic42FgYHBiYmCwA2JHIHYGYlcgdgFiDyB2Z4LIW0MxSF0pIwNDDhBnQ3EuEOcDcQkQ1wBxHRBXMULUFQDx/MrDQFsYScCkAVJMRjcdAOVMCpU=');
+
+
+function TRSObject.Click(LeftClick: Boolean = True; Attempts: Int32 = 2): Boolean; override;
+var
+  ATPA: T2DPointArray;
+  Points: TPointArray;
+begin
+  // ATPA := MainScreen.FindObject(Finder);
+  if Self.Find(ATPA) then
+    begin
+      ATPA.SortBySize();
+      Points := ATPA[0] // 0 for the largest one.
+
+      if Points <> [] then
+      begin
+        //Hover
+        Mouse.Move(Points[Random(0, High(Points))]);
+        //Click
+        Mouse.Click(MOUSE_LEFT);
+      end;
+
+      //Mouse.Move(Box(Mouse.Position, 75, 75), True);
+    end;
+end;
+
+procedure TAntiban.Setup; override;
+begin
+  inherited;
+
+end;
+
+procedure TScript.WriteMsg(Message: String);
+begin
+  WriteLn('[Bot]: ', Message);
+end;
+
+procedure TScript.Init(MaxActions: Int32; MaxTime: Int64); override;
+begin
+  Name := 'Staller';
+
+  inherited;
+
+  Stall.SetupCommon();
+  Stall.Filter.Walker := False;
+  Stall.Filter.Finder := True;
+  Stall.Finder.Colors += CTS2(16726528, 1, 0.01, 0.01);
+
+  Login.AddPlayer('USERNAME_HERE', 'PASSWORD_HERE', '', []);
+
+  if not RSClient.IsLoggedIn then
+    Login.LoginPlayer;
+end;
+
+function TScript.GetState: EState;
+begin
+  if Keyboard.IsKeyDown(VK_BACK) then
+    TerminateScript;
+
+  // if inv full drop all
+  if Inventory.IsFull() then
+  begin
+    Exit(EState.DROPPING);
+  end;
+
+  Exit(EState.STEALING); 
+end;
+
+procedure TScript.Run(MaxTime: Int64);
+var
+  i: UInt32;
+  FruitPnts: TPointArray;
+begin
+  ClearDebug;
+  Self.Init(999999999, MaxTime);
+
+  while not Self.ShouldStop do
+  begin
+    State := Self.GetState;
+
+    case State of
+      STEALING:
+        begin
+          // if Minimap.GetRunEnergy > 80 then
+          //   Minimap.EnableRun;
+          WriteMsg('stealing');
+          Stall.Click();
+          Wait(50, 1000);
+        end;
+      DROPPING:
+        begin
+          // WriteMsg('fruit before drop');
+          // if FindDTMs(StrangeFruitDTM, FruitPnts, INVENTORY.X1,INVENTORY.Y1,INVENTORY.X2,INVENTORY.Y2) then
+          // begin
+          //   for i := 0 to High(FruitPnts) do
+          //   begin
+          //     Mouse.Move(FruitPnts[i]);
+          //     Mouse.Click(MOUSE_LEFT);
+          //   end;
+          // end;
+          WriteMsg('dropping');
+          Inventory.ShiftDrop(PMINER_DP);
+        end;
+    end;
+
+    //Self.DoAntiban;
+  end;
+end;
+
+begin
+  Script.Run(29600000);
+end.

@@ -1,0 +1,154 @@
+{$DEFINE SRL_DISABLE_REMOTEINPUT}
+{$I SRL/osr.simba}
+{$I WaspLib/osr.simba}
+
+///////////////////////////////////////////////////
+//  Crafts items at the Edgeville furnace, simply
+//  mark item 1, item 2, deposit all, and furnace with
+//  RuneLite's on screen markers.
+//
+//  User beware, this was written very quickly and
+//  probably has bugs. Don't leave it unattended for too long.
+///////////////////////////////////////////////////
+
+type
+  EState = (
+    CRAFTING, BANKING
+  );
+
+  TScript = record(TBaseWalkerScript)
+    State: EState;
+    Banker: TRSObject;
+    Furnace: TRSObject;
+    GBar: TRSObject;
+    Ruby: TRSObject;
+    Deposit: TRSObject;
+  end;
+
+var
+  Script: TScript;
+
+function TRSObject.Click(LeftClick: Boolean = True; Attempts: Int32 = 2): Boolean; override;
+var
+  ATPA: T2DPointArray;
+  Points: TPointArray;
+begin
+  // ATPA := MainScreen.FindObject(Finder);
+  if Self.Find(ATPA) then
+  begin
+    ATPA.SortBySize();
+    Points := ATPA[0] // 0 for the largest one.
+
+    if Points <> [] then
+    begin
+      //Hover
+      Mouse.Move(Points[Random(0, High(Points))]);
+      //Click
+      if MainScreen.IsUpText(Self.UpText) or (Self.UpText = []) then
+        Mouse.Click(MOUSE_LEFT);
+        if SRL.Dice(25) then
+          Mouse.Move(Box(Mouse.Position, 70, 70), True);
+    end;
+
+  end;
+end;
+
+procedure TAntiban.Setup; override;
+begin
+  inherited;
+
+end;
+
+procedure TScript.WriteMsg(Message: String);
+begin
+  WriteLn('[Bot]: ', Message);
+end;
+
+procedure TScript.Init(MaxActions: Int32; MaxTime: Int64); override;
+begin
+  Name := 'Crafter';
+
+  inherited;
+
+  Banker.SetupCommon();
+  Banker.Filter.Walker := False;
+  Banker.Filter.Finder := True;
+  Banker.Finder.Colors += CTS2(16776960, 1, 0.01, 0.01);
+  Banker.UpText := ['Bank'];
+  Furnace.SetupCommon();
+  Furnace.Filter.Walker := False;
+  Furnace.Filter.Finder := True;
+  Furnace.Finder.Colors += CTS2(65280, 1, 0.01, 0.01);
+  Furnace.UpText := ['Smelt'];
+  GBar.SetupCommon();
+  GBar.Filter.Walker := False;
+  GBar.Filter.Finder := True;
+  GBar.Finder.Colors += CTS2(16711882, 1, 0.01, 0.01);
+  Ruby.SetupCommon();
+  Ruby.Filter.Walker := False;
+  Ruby.Filter.Finder := True;
+  Ruby.Finder.Colors += CTS2(37119, 1, 0.01, 0.01);
+  Deposit.SetupCommon();
+  Deposit.Filter.Walker := False;
+  Deposit.Filter.Finder := True;
+  Deposit.Finder.Colors += CTS2(16716544, 1, 0.01, 0.01);
+
+  Login.AddPlayer('USERNAME_HERE', 'PASSWORD_HERE', '', []);
+
+  if not RSClient.IsLoggedIn then
+    Login.LoginPlayer;
+end;
+
+function TScript.GetState: EState;
+begin
+  if Keyboard.IsKeyDown(VK_BACK) then
+    TerminateScript;
+
+  if Inventory.Count() = 27 then
+   Exit(EState.CRAFTING);
+
+  Exit(EState.BANKING);
+end;
+
+procedure TScript.Run(MaxTime: Int64);
+begin
+  ClearDebug;
+  Self.Init(999999999, MaxTime);
+
+  while not Self.ShouldStop do
+  begin
+    State := Self.GetState;
+
+    case State of
+      CRAFTING:
+        begin
+          Furnace.Click();
+          Wait(5000, 7000);
+          Keyboard.PressKey(VK_SPACE);
+          Wait(24500, 28000);
+        end;
+      BANKING:
+        begin
+          Banker.Click();
+          Wait(3000, 5000);
+          if Bank.IsOpen(2000) then
+          begin
+            Deposit.Click();
+            Wait(250, 750);
+            Ruby.Click();
+            Wait(250, 750);
+            GBar.Click();
+            Wait(250, 750);
+            Keyboard.PressKey(VK_ESCAPE);
+            Wait(1500, 2000);
+          end;
+        end;
+    end;
+
+    //Self.DoAntiban;
+  end;
+end;
+
+begin
+  Script.Run(29600000);
+end.

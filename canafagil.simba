@@ -1,0 +1,157 @@
+{$DEFINE SRL_DISABLE_REMOTEINPUT}
+{$I SRL/osr.simba}
+{$I WaspLib/osr.simba}
+
+///////////////////////////////////////////////////
+//  This script works in conjunction with the 
+//  improved Agility RuneLite plugin. Configure
+//  the colors however you want and then paste them here.
+//  Just need: Next Obstacle and MOG to be colored.
+//
+//  User beware, this was written very quickly and
+//  probably has bugs. Don't leave it unattended for too long.
+///////////////////////////////////////////////////
+
+type
+  EState = (
+    DO_OBSTACLE, GET_MOG, RESET_POS
+  );
+
+  TScript = record(TBaseWalkerScript)
+    State: EState;
+    Obstacle: TRSObject;
+    MOG: TRSObject;
+    HP: Int32;
+  end;
+
+var
+  Script: TScript;
+
+
+function TRSObject.Click(LeftClick: Boolean = True; Attempts: Int32 = 2): Boolean; override;
+var
+  ATPA: T2DPointArray;
+  Points: TPointArray;
+begin
+  repeat
+    if Self.Find(ATPA) then
+      Points := ATPA[0] // 0 for the closest one.
+
+    if Points <> [] then
+    begin
+      //Hover
+      Mouse.Move(Points[Random(0, High(Points))]);
+      //Click
+      Mouse.Click(MOUSE_LEFT);
+      //Spam Random
+      if SRL.Dice(15) then
+      begin
+        for 1 to SRL.TruncatedGauss(0, 3) do
+        begin
+          Mouse.Move(Points[Random(0, High(Points))]);
+          Mouse.Click(MOUSE_LEFT);
+        end;
+      end;
+    end;
+
+  until(MainScreen.DidRedClick() or not Self.Find());
+  Mouse.Move(Box(Mouse.Position, 75, 75), True);
+end;
+
+procedure TAntiban.Setup; override;
+begin
+  inherited;
+
+  Antiban.Skills := [ERSSkill.TOTAL];
+  Antiban.MinZoom := 15;
+  Antiban.MaxZoom := 40;
+end;
+
+procedure TScript.WriteMsg(Message: String);
+begin
+  WriteLn('[Bot]: ', Message);
+end;
+
+procedure TScript.Init(MaxActions: Int32; MaxTime: Int64); override;
+begin
+  Name := 'Canifis Script';
+
+  inherited;
+
+  RSW.Setup('seer');
+  RSW.ScreenWalk := False;
+
+  Obstacle.SetupCommon();
+  Obstacle.Filter.Walker := False;
+  Obstacle.Filter.Finder := True;
+  Obstacle.Finder.Colors += CTS2(16711935, 1, 0.01, 0.01);
+  MOG.SetupCommon();
+  MOG.Filter.Walker := False;
+  MOG.Filter.Finder := True;
+  MOG.Finder.Colors      += CTS2(37119, 1, 0.01, 0.01);
+
+  Login.AddPlayer('USERNAME_HERE', 'PASSWORD_HERE', '', []);
+
+  if not RSClient.IsLoggedIn then
+    Login.LoginPlayer;
+end;
+
+function TScript.GetState: EState;
+begin
+  // We can either be in DO_OBSTACLE, GET_MOG, or RESET_POS
+  // If we are able to find the obstacle hitbox on mainscreen
+  if Obstacle.Find() then
+  begin
+    WriteMsg('found obstacle');
+    Exit(EState.DO_OBSTACLE);
+  end;
+  // If we are able to find the mog hitbox on mainscreen 
+  // (intentionally checked after obstacle)
+  if MOG.Find() then
+  begin
+    WriteMsg('found mog');
+    Exit(EState.GET_MOG);
+  end;
+
+  if Minimap.OnGroundLevel() then
+    Exit(EState.RESET_POS);
+
+  // Catch for nothing on screen during transition between obstacles
+  Exit(EState.DO_OBSTACLE); 
+end;
+
+procedure TScript.Run(MaxTime: Int64);
+begin
+  ClearDebug;
+  Self.Init(999999999, MaxTime);
+
+  while not Self.ShouldStop do
+  begin
+    State := Self.GetState;
+    case State of
+      DO_OBSTACLE:
+        begin
+          WriteMsg('do obstacle');
+          Obstacle.Click();
+          Wait(1000, 4000);
+        end;
+      GET_MOG:
+        begin
+          WriteMsg('get mog');
+          MOG.Click();
+          Wait(2000, 3000);
+        end;
+      RESET_POS:
+        begin
+          WriteMsg('reset pos');
+          RSW.WalkPath([[323, 167]], 50);
+        end;
+    end;
+
+    //Self.DoAntiban;
+  end;
+end;
+
+begin
+  Script.Run(29600000);
+end.

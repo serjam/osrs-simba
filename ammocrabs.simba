@@ -1,0 +1,177 @@
+program new;
+{$I SRL-F/OSR.simba}
+
+///////////////////////////////////////////////////
+//TODO: 
+//    Antiban stuff is really bad, needs rewriting
+//    Add usage of inventory items (pots, food, etc)
+//    Clean up the code, most of this was just pasted...
+//
+//  User beware, this was written very quickly and
+//  probably has bugs. Don't leave it unattended for too long.
+///////////////////////////////////////////////////
+
+Const
+(* General settings *)
+  HEALPERC   = 60;      // % to heal at
+  MAXRUNTIME = 480;     // Max run time (in minutes)
+
+(* Player settings *)
+  PNAME        = '';    // Username
+  PPASS        = '';    // Password
+
+(* Break settings *)
+  BREAKAFTER   = '115'; // Break after how long (in minutes)
+  BREAKFOR     = '15';  // Break for how long (in minutes)
+
+Type
+  TScript = record
+    Laps               : Int32;
+    Path_Crab,
+    Path_Reset         : TPointArray;
+    ShutdownTime       : Int64;
+    ScriptTimer        : TStopwatch;
+    RSW                : TRSWalker;
+  end;
+
+Var
+  Bot: TScript;
+
+procedure TScript.WriteMsg(Message: String);
+begin
+  WriteLn('[Bot]: ',Message);
+end;
+
+procedure TScript.DoLoseFocus();
+Var T: Int32;
+begin
+  T := SRL.NormalRange(1700,5000);
+  Antiban.DebugLn('Losing focus for '+SRL.MsToTime(T, Time_Short));
+  Antiban.LoseFocus(T);
+end;
+procedure TMouse.RandomMovement();
+var
+  S: Int32;
+begin
+  S := Self.Speed;
+  Self.Speed := 4;
+  Self.Move(Box(Mouse.Position, 75, 75), True, );
+  Self.Speed := S;
+end;
+procedure TAntiban.RandomSmallRotate();
+begin
+  Self.DebugLn('Random Small Rotate');
+
+  case SRL.Dice(50) of
+    True:  Minimap.SetCompassAngle(Minimap.GetCompassAngle() - SRL.NormalRange(10, 40, 3));
+    False: Minimap.SetCompassAngle(Minimap.GetCompassAngle() + SRL.NormalRange(10, 40, 3));
+  end;
+end;
+
+procedure TScript.SetupAntiban();
+begin
+  Antiban.Skills += ERSSKILL.RANGE;
+  Antiban.AddTask((ONE_MINUTE*1),  @Mouse.RandomMovement);
+  Antiban.AddTask((ONE_MINUTE*6),  @Antiban.HoverMSPlayers);
+  Antiban.AddTask((ONE_MINUTE*7),  @AntiBan.RandomSmallRotate);
+  Antiban.AddTask((ONE_MINUTE*8),  @Self.DoLoseFocus);
+  Antiban.AddTask((ONE_MINUTE*8),  @Antiban.HoverMSNPCs);
+  Antiban.AddTask((ONE_MINUTE*20), @Antiban.HoverSkills);
+end;
+
+procedure TScript.DoAB();
+begin
+  Antiban.DismissRandom();
+  if Antiban.DoAntiban() then
+    if (not RSClient.IsLoggedIn) then
+      Login.LoginPlayer();
+end;
+
+procedure TScript.DeclarePlayers();
+begin
+  Login.AddPlayer(PNAME, PPASS, '', []);
+end;
+
+procedure TScript.Init();
+begin
+
+  Self.SetupAntiban();
+
+  Self.RSW.Setup('fossilammo');
+  Self.RSW.EnableRunAtEnergy := 85;
+
+  Self.DeclarePlayers();
+  MM2MS.ZoomLevel            := 0;
+  Mouse.Speed                := SRL.NormalRange(16,21);
+
+  Path_Crab       := [[107, 169], [111, 99], [96, 45]];
+  Path_Reset      := [[96, 45], [111, 99], [107, 169]];
+  Self.Laps := 0;
+
+
+  Self.ScriptTimer.Start();
+  Self.ShutdownTime := (MAXRUNTIME * 60000) + Random(- (MAXRUNTIME * 6000), (MAXRUNTIME * 6000));
+end;
+
+// Walk to the desired location, kick off a timer and just do AB actions
+procedure TScript.FightCrabs();
+Var Timer: TCountDown;
+begin
+  if (not Self.RSW.WalkPath(Self.Path_Crab, 8)) then 
+    TerminateScript('Failed to walk to crab tile');
+  
+  Self.WriteMsg('Fighting Crabs...');
+  Timer.Init(660000 + SRL.NormalRange(121, 60000)); //11 mins + some random up to 1 extra min
+  while not Timer.IsFinished() do
+  begin
+    Self.DoAB();
+  end;
+end;
+// Just walk out of the range of aggro
+procedure TScript.ResetAggro();
+begin
+  Self.WriteMsg('Resetting Aggro...');
+  if (not Self.RSW.WalkPath(Self.Path_Reset)) then 
+    TerminateScript('Failed to walk to reset tile');
+
+  Inc(Self.Laps);
+end;
+
+procedure TScript.Run();
+var
+  IsLoggedIn: Boolean = False;
+begin
+  // Main Loop
+  while (Self.ScriptTimer.ElapsedTime < Self.ShutdownTime) do
+  begin
+    // ------------------------------------------------------------------------
+    // Login Stuff
+    // ------------------------------------------------------------------------
+    IsLoggedIn := RSClient.IsLoggedIn();
+    if (not IsLoggedIn) then
+    begin
+       IsLoggedIn := Login.LoginPlayer(); // attempt to login
+       if (not IsLoggedIn) then TerminateScript('FAILED TO LOGIN');
+    end;
+    Self.WriteMsg('Status: Logged In');
+    wait(SRL.NormalRange(125, 275));
+
+    // ------------------------------------------------------------------------
+    // Core Logic
+    // ------------------------------------------------------------------------
+    Self.FightCrabs(); // walk the path there, sit there for 10 mins while calling AB
+    Self.ResetAggro(); // walk the path to reset point
+
+    Self.WriteMsg('Minutes Elapsed: ' + ToString(Self.ScriptTimer.ElapsedTime/60000));
+    Self.WriteMsg('Laps Completed: ' + ToString(Self.Laps));
+    wait(SRL.NormalRange(125, 275));
+  end;
+
+  Logout.ClickLogout();
+  TerminateScript('Time to shutdown');
+end;
+
+begin
+  Bot.Init();
+  Bot.Run();
+end.

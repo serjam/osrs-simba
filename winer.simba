@@ -1,0 +1,150 @@
+{$DEFINE SRL_DISABLE_REMOTEINPUT}
+{$I SRL/osr.simba}
+{$I WaspLib/osr.simba}
+
+///////////////////////////////////////////////////
+//  Useful for action in the game where you have to
+//  click two items and then wait for processing events.
+//  Ex. Wine making, fletching, etc.
+//
+//  User beware, this was written very quickly and
+//  probably has bugs. Don't leave it unattended for too long.
+///////////////////////////////////////////////////
+
+type
+  EState = (
+    WINING, BANKING
+  );
+
+  TScript = record(TBaseWalkerScript)
+    State: EState;
+    Banker: TRSObject;
+    JOW: TRSObject;
+    Grapes: TRSObject;
+    Deposit: TRSObject;
+  end;
+
+var
+  Script: TScript;
+
+
+
+function TRSObject.Click(LeftClick: Boolean = True; Attempts: Int32 = 2): Boolean; override;
+var
+  ATPA: T2DPointArray;
+  Points: TPointArray;
+begin
+  // ATPA := MainScreen.FindObject(Finder);
+  if Self.Find(ATPA) then
+    begin
+      ATPA.SortBySize();
+      Points := ATPA[0] // 0 for the largest one.
+
+      if Points <> [] then
+      begin
+        //Hover
+        Mouse.Move(Points[Random(0, High(Points))]);
+        //Click
+        Mouse.Click(MOUSE_LEFT);
+      end;
+
+      //Mouse.Move(Box(Mouse.Position, 75, 75), True);
+    end;
+end;
+
+procedure TAntiban.Setup; override;
+begin
+  inherited;
+
+end;
+
+procedure TScript.WriteMsg(Message: String);
+begin
+  WriteLn('[Bot]: ', Message);
+end;
+
+procedure TScript.Init(MaxActions: Int32; MaxTime: Int64); override;
+begin
+  Name := 'Winer';
+
+  inherited;
+
+  Banker.SetupCommon();
+  Banker.Filter.Walker := False;
+  Banker.Filter.Finder := True;
+  Banker.Finder.Colors += CTS2(16776960, 1, 0.01, 0.01);
+  JOW.SetupCommon();
+  JOW.Filter.Walker := False;
+  JOW.Filter.Finder := True;
+  JOW.Finder.Colors += CTS2(65453, 1, 0.01, 0.01);
+  Grapes.SetupCommon();
+  Grapes.Filter.Walker := False;
+  Grapes.Filter.Finder := True;
+  Grapes.Finder.Colors += CTS2(16711882, 1, 0.01, 0.01);
+  Deposit.SetupCommon();
+  Deposit.Filter.Walker := False;
+  Deposit.Filter.Finder := True;
+  Deposit.Finder.Colors += CTS2(16755968, 1, 0.01, 0.01);
+
+  Login.AddPlayer('USERNAME_HERE', 'PASSWORD_HERE', '', []);
+
+  if not RSClient.IsLoggedIn then
+    Login.LoginPlayer;
+end;
+
+function TScript.GetState: EState;
+begin
+  if Keyboard.IsKeyDown(VK_BACK) then
+    TerminateScript;
+
+  //if Inventory.IsFull() then
+  //  Exit(EState.WINING);
+
+  Exit(EState.WINING);
+end;
+
+procedure TScript.Run(MaxTime: Int64);
+begin
+  ClearDebug;
+  Self.Init(999999999, MaxTime);
+
+  while not Self.ShouldStop do
+  begin
+    State := Self.GetState;
+
+    case State of
+      WINING:
+        begin
+          Inventory.HoverSlot(13);
+          Wait(250, 750);
+          Mouse.Click(MOUSE_LEFT);
+          Wait(250, 750);
+          Inventory.HoverSlot(14);
+          Mouse.Click(MOUSE_LEFT);
+          Wait(1000, 2000);
+          Keyboard.PressKey(VK_SPACE);
+          Wait(12000, 15000);
+        end;
+      BANKING:
+        begin
+          Banker.Click();
+          //TODO: MAKE SURE BANK IS OPEN!
+          Wait(1000, 2000);
+          Deposit.Click();
+          Wait(250, 750);
+          JOW.Click();
+          Wait(250, 750);
+          Grapes.Click();
+          Wait(250, 750);
+          Keyboard.PressKey(VK_ESCAPE);
+          Wait(1500);
+        end;
+    end;
+
+    //Self.DoAntiban;
+  end;
+end;
+
+begin
+  Script.Run(29600000);
+end.

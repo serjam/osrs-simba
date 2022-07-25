@@ -1,0 +1,121 @@
+{$DEFINE SRL_DISABLE_REMOTEINPUT}
+{$I SRL/osr.simba}
+{$I WaspLib/osr.simba}
+
+///////////////////////////////////////////////////
+//  Take advantage of the fishing spot that never moves
+//  right outside of Priff. Mark it with a RuneLite
+//  on screen marker.
+//
+//  User beware, this was written very quickly and
+//  probably has bugs. Don't leave it unattended for too long.
+///////////////////////////////////////////////////
+
+type
+  EState = (
+    DROPPING, FISHING
+  );
+
+  TScript = record(TBaseWalkerScript)
+    State: EState;
+    Fish: TRSObject;
+  end;
+
+var
+  Script: TScript;
+
+const
+  DROP_SLOTS: TIntegerArray = [3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27];
+
+
+function TRSObject.Click(LeftClick: Boolean = True; Attempts: Int32 = 2): Boolean; override;
+var
+  ATPA: T2DPointArray;
+  Points: TPointArray;
+begin
+  // ATPA := MainScreen.FindObject(Finder);
+  if Self.Find(ATPA) then
+    begin
+      ATPA.SortBySize();
+      Points := ATPA[0] // 0 for the largest one.
+
+      if Points <> [] then
+      begin
+        //Hover
+        Mouse.Move(Points[Random(0, High(Points))]);
+        //Click
+        Mouse.Click(MOUSE_LEFT);
+      end;
+
+      //Mouse.Move(Box(Mouse.Position, 75, 75), True);
+    end;
+end;
+
+procedure TAntiban.Setup; override;
+begin
+  inherited;
+
+end;
+
+procedure TScript.WriteMsg(Message: String);
+begin
+  WriteLn('[Bot]: ', Message);
+end;
+
+procedure TScript.Init(MaxActions: Int32; MaxTime: Int64); override;
+begin
+  Name := 'Winer';
+
+  inherited;
+
+  Fish.SetupCommon();
+  Fish.Filter.Walker := False;
+  Fish.Filter.Finder := True;
+  Fish.Finder.Colors += CTS2(15204096, 1, 0.01, 0.01);
+
+  Login.AddPlayer('USERNAME_HERE', 'PASSWORD_HERE', '', []);
+
+  if not RSClient.IsLoggedIn then
+    Login.LoginPlayer;
+end;
+
+function TScript.GetState: EState;
+begin
+  if Keyboard.IsKeyDown(VK_BACK) then
+    TerminateScript;
+
+  if Inventory.IsFull() then
+    Exit(EState.DROPPING);
+
+  Exit(EState.FISHING); 
+end;
+
+procedure TScript.Run(MaxTime: Int64);
+begin
+  ClearDebug;
+  Self.Init(999999999, MaxTime);
+
+  while not Self.ShouldStop do
+  begin
+    State := Self.GetState;
+
+    case State of
+      DROPPING:
+        begin
+          Inventory.ShiftDrop(DROP_SLOTS);
+          Wait(500, 1500);
+        end;
+      FISHING:
+        begin
+          Fish.Click();
+          Wait(15000, 30000);
+        end;
+    end;
+
+    //Self.DoAntiban;
+  end;
+end;
+
+begin
+  Script.Run(29600000);
+end.
